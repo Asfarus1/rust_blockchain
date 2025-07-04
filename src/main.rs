@@ -1,9 +1,15 @@
 mod block;
+mod blockchain;
 
-use block::Block;
+use blockchain::Blockchain;
 
 fn main() {
-    let block = Block::new(0, "0".to_string(), "Genesis Block".to_string());
+    let mut blockchain = Blockchain::new();
+    blockchain.add_block("First block".to_string());
+    blockchain.add_block("Second block".to_string());
 
-    println!("{:?}", block);
+    for block in blockchain.chain {
+        println!("{}", block);
+        println!("-------------------------------");
+    }
 }
