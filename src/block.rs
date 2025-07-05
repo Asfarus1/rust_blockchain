@@ -22,35 +22,35 @@ impl Block {
             data,
             nonce: 0,
         };
-        block.update_hash();
+        block.hash = block.compute_hash();
         block
     }
 
-    pub fn update_hash(&mut self) {
+    pub fn compute_hash(&self) -> String {
         let data = format!(
             "{}{}{}{}{}",
             self.index, self.timestamp, self.previous_hash, self.data, self.nonce
         );
         let mut hasher = Sha256::new();
         hasher.update(data);
-        self.hash = hex::encode(hasher.finalize());
+        hex::encode(hasher.finalize())
     }
 
-    pub fn mine_block(&mut self, difficalty: usize) {
+    pub fn mine_block(&mut self, difficulty: usize) {
         let now = SystemTime::now();
         loop {
-            self.update_hash();
-            if self.hash[0..difficalty] == "0".repeat(difficalty) {
+            self.hash = self.compute_hash();
+            if self.hash[0..difficulty] == "0".repeat(difficulty) {
+                println!(
+                    "Successfully mined block {} with hash {} in {:.2?}",
+                    self.index,
+                    self.hash,
+                    now.elapsed().unwrap()
+                );
                 break;
             }
             self.nonce += 1;
         }
-        println!(
-            "Block mined: index {}, hash {} for {:?}",
-            self.index,
-            self.hash,
-            now.elapsed().unwrap(),
-        );
     }
 }
 

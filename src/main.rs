@@ -8,8 +8,5 @@ fn main() {
     blockchain.add_block("First block".to_string());
     blockchain.add_block("Second block".to_string());
 
-    for block in blockchain.chain {
-        println!("{}", block);
-        println!("-------------------------------");
-    }
+    blockchain.validate_chain();
 }
