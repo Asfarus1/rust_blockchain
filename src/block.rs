@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fmt;
+use std::{fmt, time::SystemTime};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
@@ -22,18 +22,35 @@ impl Block {
             data,
             nonce: 0,
         };
-        block.hash = block.calculate_hash();
+        block.update_hash();
         block
     }
 
-    pub fn calculate_hash(&self) -> String {
+    pub fn update_hash(&mut self) {
         let data = format!(
             "{}{}{}{}{}",
             self.index, self.timestamp, self.previous_hash, self.data, self.nonce
         );
         let mut hasher = Sha256::new();
         hasher.update(data);
-        hex::encode(hasher.finalize())
+        self.hash = hex::encode(hasher.finalize());
+    }
+
+    pub fn mine_block(&mut self, difficalty: usize) {
+        let now = SystemTime::now();
+        loop {
+            self.update_hash();
+            if self.hash[0..difficalty] == "0".repeat(difficalty) {
+                break;
+            }
+            self.nonce += 1;
+        }
+        println!(
+            "Block mined: index {}, hash {} for {:?}",
+            self.index,
+            self.hash,
+            now.elapsed().unwrap(),
+        );
     }
 }
 
