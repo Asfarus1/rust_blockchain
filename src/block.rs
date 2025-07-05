@@ -1,3 +1,4 @@
+use crate::errors::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fmt, time::SystemTime};
@@ -36,7 +37,7 @@ impl Block {
         hex::encode(hasher.finalize())
     }
 
-    pub fn mine_block(&mut self, difficulty: usize) {
+    pub fn mine_block(&mut self, difficulty: usize) -> Result<()> {
         let now = SystemTime::now();
         loop {
             self.hash = self.compute_hash();
@@ -45,12 +46,33 @@ impl Block {
                     "Successfully mined block {} with hash {} in {:.2?}",
                     self.index,
                     self.hash,
-                    now.elapsed().unwrap()
+                    now.elapsed()?
                 );
                 break;
             }
             self.nonce += 1;
         }
+        Ok(())
+    }
+
+    pub fn validate(&self, previous_hash: &str, difficulty: usize) -> Result<()> {
+        if self.hash != self.compute_hash() {
+            Err(Error::BlockHasInvalidHash(self.index, self.hash.to_owned()))?;
+        }
+        if self.hash[..difficulty] != "0".repeat(difficulty) {
+            Err(Error::UnsatisfiedHashDifficulty(
+                self.index,
+                self.hash.to_owned(),
+            ))?;
+        }
+        if self.previous_hash != previous_hash {
+            Err(Error::BlockHasInvalidPreviusBlockHash(
+                self.index,
+                self.hash.to_owned(),
+                previous_hash.to_owned(),
+            ))?;
+        }
+        Ok(())
     }
 }
 
