@@ -21,22 +21,23 @@ impl Node {
         self.blockchain.add_block(data.to_string())
     }
 
+    #[allow(unused)]
     #[instrument(skip_all, fields(node_name = self.name, result), level = "info")]
     pub fn replace_chain(&mut self, new_chain: Vec<crate::block::Block>) -> Result<bool> {
-        if let Err(e) = Blockchain::validate_chain(&new_chain, self.blockchain.difficulty) {
-            error!("Failed to replace chain {:?}", e);
-            Err(e)?;
-        }
-
         if new_chain.len() <= self.blockchain.chain.len() {
             info!("Node {} new chain is not longer", self.name);
             return Ok(false);
+        }
+        if let Err(e) = Blockchain::validate_chain(&new_chain, self.blockchain.difficulty) {
+            error!("Failed to replace chain {:?}", e);
+            Err(e)?;
         }
         self.blockchain.chain = new_chain;
 
         Ok(true)
     }
 
+    #[allow(unused)]
     pub fn print_chain(&self) {
         println!("Chain of node {}:", self.name);
         for block in &self.blockchain.chain {
@@ -49,7 +50,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::block::Block;
+    use crate::blockchain;
     use crate::errors::Error;
 
     #[test]
@@ -108,12 +109,14 @@ mod tests {
         let mut node = Node::new("Node", 2).unwrap();
         node.add_block("Valid block").unwrap();
 
-        let mut fake_chain = node.blockchain.chain.clone();
-        fake_chain[1].hash = "tampered_hash".to_string();
+        let mut fake_chain = blockchain::Blockchain::new(2).unwrap();
+        fake_chain.add_block("Valid block".to_string()).unwrap();
+        fake_chain.add_block("Tanpered block".to_string()).unwrap();
+        fake_chain.chain[2].hash = "00_tampered_hash".to_string();
 
-        let result = node.replace_chain(fake_chain);
+        let result = node.replace_chain(fake_chain.chain);
         match result {
-            Err(Error::BlockHasInvalidHash(1, _)) => {}
+            Err(Error::BlockHasInvalidHash(2, _)) => {}
             v => panic!("Expected error BlockHasInvalidHash, actual {v:?}"),
         }
 

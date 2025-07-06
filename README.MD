@@ -11,4 +11,5 @@ TODO
 To build and run the project:
 
 ```bash
-cargo run
+RUST_LOG=info cargo run
+```

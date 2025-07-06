@@ -32,6 +32,7 @@ impl Blockchain {
         Ok(())
     }
 
+    #[allow(unused)]
     #[instrument(skip(chain), level = "debug")]
     pub fn validate_chain(chain: &[Block], difficulty: usize) -> Result<()> {
         let mut it = chain.iter();
@@ -104,7 +105,7 @@ mod tests {
         blockchain.add_block("X".to_string()).unwrap();
         blockchain.add_block("Y".to_string()).unwrap();
 
-        blockchain.chain[2].hash = "bad_hash".to_string();
+        blockchain.chain[2].hash = "00_bad_hash".to_string();
 
         let result = Blockchain::validate_chain(&blockchain.chain, difficulty);
         match result {

@@ -60,11 +60,11 @@ impl Block {
                 previous_hash.to_owned(),
             ))?;
         }
-        if self.hash != self.compute_hash() {
-            Err(Error::BlockHasInvalidHash(self.index, self.hash.to_owned()))?;
-        }
         if self.hash[..difficulty] != "0".repeat(difficulty) {
             Err(Error::UnsatisfiedHashDifficulty(self.index, difficulty))?;
+        }
+        if self.hash != self.compute_hash() {
+            Err(Error::BlockHasInvalidHash(self.index, self.hash.to_owned()))?;
         }
         Ok(())
     }
@@ -126,7 +126,7 @@ mod tests {
         let difficulty = 2;
         let mut block = Block::new(1, "0000".to_string(), "Bad Hash".to_string());
         block.mine_block(difficulty).unwrap();
-        block.hash = "1234_fake_hash".to_string();
+        block.hash = "0001234_fake_hash".to_string();
 
         let result = block.validate("0000", difficulty);
         match result {
@@ -138,9 +138,9 @@ mod tests {
     #[test]
     fn test_validate_invalid_difficulty() {
         let mut block = Block::new(1, "0000".to_string(), "Low difficulty".to_string());
-        block.mine_block(1).unwrap(); // майним с лёгкой сложностью
+        block.mine_block(1).unwrap();
 
-        let result = block.validate("0000", 3); // проверяем с более высокой
+        let result = block.validate("0000", 3);
         match result {
             Err(Error::UnsatisfiedHashDifficulty(1, _)) => {}
             v => panic!("Expected error UnsatisfiedHashDifficulty, actual {v:?}"),
