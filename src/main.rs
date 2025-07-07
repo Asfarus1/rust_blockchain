@@ -1,16 +1,18 @@
 mod api;
 mod block;
 mod blockchain;
+mod config;
 mod errors;
 mod node;
 
 use std::sync::{Arc, Mutex};
 
+use clap::Parser;
 use errors::Result;
 use node::Node;
 use tracing_subscriber::EnvFilter;
 
-use crate::api::start_http_server;
+use crate::{api::start_http_server, config::Config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,11 +24,12 @@ async fn main() -> Result<()> {
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
         .compact()
         .init();
+    let conf = Config::try_parse()?;
 
     tracing::info!("Logger initialized");
 
     let node = Arc::new(Mutex::new(Node::new("A", 4)?));
 
-    start_http_server(node).await;
+    start_http_server(node, conf).await;
     Ok(())
 }

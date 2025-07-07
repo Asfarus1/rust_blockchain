@@ -15,6 +15,8 @@ pub enum Error {
     UnsatisfiedHashDifficulty(u64, usize),
     #[error("HTTP parsing error: {0}")]
     HttpParsing(#[from] axum::http::Error),
+    #[error("Config error: {0}")]
+    InvalidConfig(#[from] clap::Error),
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + 'static>),
 }

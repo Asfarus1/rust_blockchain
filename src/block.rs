@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 use tracing::instrument;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Block {
     pub index: u64,
     pub timestamp: u64,

@@ -1,8 +1,9 @@
 use crate::block::Block;
 use crate::errors::{Error, Result};
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub difficulty: usize,
