@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::blockchain::Blockchain;
 use crate::errors::Result;
 use tracing::{error, info, instrument};
@@ -5,6 +7,7 @@ use tracing::{error, info, instrument};
 pub struct Node {
     pub name: String,
     pub blockchain: Blockchain,
+    pub peers: HashSet<String>,
 }
 
 impl Node {
@@ -13,6 +16,7 @@ impl Node {
         Ok(Self {
             name: name.to_string(),
             blockchain: Blockchain::new(difficulty)?,
+            peers: HashSet::new(),
         })
     }
 
@@ -22,7 +26,7 @@ impl Node {
     }
 
     #[allow(unused)]
-    #[instrument(skip_all, fields(node_name = self.name, result), level = "info")]
+    #[instrument(skip_all, fields(node_name = self.name), level = "info")]
     pub fn replace_chain(&mut self, new_chain: Vec<crate::block::Block>) -> Result<bool> {
         if new_chain.len() <= self.blockchain.chain.len() {
             info!("Node {} new chain is not longer", self.name);
@@ -35,6 +39,12 @@ impl Node {
         self.blockchain.chain = new_chain;
 
         Ok(true)
+    }
+
+    #[allow(unused)]
+    #[instrument(skip(self), fields(node_name = self.name), level = "info")]
+    pub fn register_peer(&mut self, peer: String) {
+        self.peers.insert(peer);
     }
 
     #[allow(unused)]

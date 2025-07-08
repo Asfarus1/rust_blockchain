@@ -17,11 +17,12 @@ use tracing::info;
 
 pub type SharedNode = Arc<Mutex<Node>>;
 
-pub async fn start_http_server(node: SharedNode, conf: Config) {
+pub async fn start_http_server(node: SharedNode, conf: Config) -> Result<()> {
     let app = Router::new()
         .route("/chain", get(get_chain))
         .route("/add_block", post(add_block))
         .route("/sync", post(sync_chain))
+        .route("/peer", post(register_peer))
         .with_state(node.clone())
         .layer(
             TraceLayer::new_for_http().make_span_with(|req: &Request<_>| {
@@ -44,24 +45,59 @@ pub async fn start_http_server(node: SharedNode, conf: Config) {
         )))
         .layer(SetRequestIdLayer::x_request_id(UuidRequestId));
 
-    dbg!(&conf);
     let addr = format!("127.0.0.1:{}", conf.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let addr = listener.local_addr()?;
     info!("Starting server at http://{addr}");
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
+#[axum::debug_handler]
 async fn get_chain(State(node): State<SharedNode>) -> Result<Json<Blockchain>> {
     let chain = node.lock().unwrap().blockchain.clone();
     Ok(Json(chain))
 }
 
 #[axum::debug_handler]
-async fn add_block(State(node): State<SharedNode>, Json(data): Json<String>) -> Result<String> {
-    info!("Incoming block data: {}", data);
-    let mut node = node.lock().unwrap();
-    node.add_block(&data)?;
-    Ok("Block mined and added".to_string())
+async fn register_peer(State(node): State<SharedNode>, Json(data): Json<String>) -> Result<()> {
+    node.lock().unwrap().register_peer(data);
+    Ok(())
+}
+
+#[axum::debug_handler]
+async fn add_block(
+    State(node): State<SharedNode>,
+    Json(data): Json<String>,
+) -> Result<Json<Block>> {
+    let peers: Vec<String>;
+    let chain: Vec<Block>;
+    {
+        let mut node = node.lock().unwrap();
+        node.add_block(&data)?;
+        info!("Block mined and added");
+        peers = node.peers.iter().cloned().collect();
+        chain = node.blockchain.chain.clone();
+    }
+
+    let client = reqwest::Client::new();
+    for peer in peers {
+        match client
+            .post(format!("{peer}/sync"))
+            .json(&chain)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                tracing::info!("Synced with peer {}: {}", peer, resp.status());
+            }
+            Err(err) => {
+                tracing::warn!("Failed to sync with {}: {}", peer, err);
+            }
+        }
+    }
+    let block = chain.last().unwrap();
+    Ok(Json(block.to_owned()))
 }
 
 #[axum::debug_handler]

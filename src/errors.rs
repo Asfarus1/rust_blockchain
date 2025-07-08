@@ -13,9 +13,11 @@ pub enum Error {
     BlockHasInvalidPreviusBlockHash(u64, String, String),
     #[error("Block with index {0} doesn't satisfy difficulty '{1}'")]
     UnsatisfiedHashDifficulty(u64, usize),
-    #[error("HTTP parsing error: {0}")]
+    #[error(transparent)]
     HttpParsing(#[from] axum::http::Error),
-    #[error("Config error: {0}")]
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
+    #[error(transparent)]
     InvalidConfig(#[from] clap::Error),
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + 'static>),

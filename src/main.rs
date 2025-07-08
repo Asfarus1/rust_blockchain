@@ -30,6 +30,6 @@ async fn main() -> Result<()> {
 
     let node = Arc::new(Mutex::new(Node::new("A", 4)?));
 
-    start_http_server(node, conf).await;
+    start_http_server(node, conf).await?;
     Ok(())
 }
