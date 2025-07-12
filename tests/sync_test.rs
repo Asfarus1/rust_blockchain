@@ -52,7 +52,7 @@ async fn test_manual_node_sync_between_two_servers() -> Result<()> {
 
     let res = client
         .post("http://localhost:3002/sync")
-        .json(&chain_a.chain)
+        .json(&chain_a)
         .send()
         .await
         .unwrap();
@@ -122,7 +122,7 @@ async fn test_autosync_between_two_servers() -> Result<()> {
         .await
         .unwrap();
 
-    let last_block_content = chain_b.latest_block()?.data.clone();
+    let last_block_content = chain_b.blocks().last().unwrap().data.clone();
     assert_eq!(last_block_content, "Block A1");
 
     Ok(())

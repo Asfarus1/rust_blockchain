@@ -1,12 +1,12 @@
 use crate::block::Block;
 use crate::errors::{Error, Result};
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
+use tracing::{error, instrument};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Blockchain {
-    pub chain: Vec<Block>,
-    pub difficulty: usize,
+    chain: Vec<Block>,
+    difficulty: usize,
 }
 
 impl Blockchain {
@@ -20,29 +20,44 @@ impl Blockchain {
         })
     }
 
-    pub fn latest_block(&self) -> Result<&Block> {
-        self.chain.last().ok_or(Error::ChainIsEmpty)
+    pub fn blocks(&self) -> &[Block] {
+        &self.chain[..]
     }
 
     #[instrument(skip(self), level = "debug", name = "add_block_to_blockchain")]
-    pub fn add_block(&mut self, data: String) -> Result<()> {
-        let latest_block = self.latest_block()?;
+    pub fn add_block(&mut self, data: String) -> Result<&Block> {
+        let latest_block = self.chain.last().ok_or(Error::ChainIsEmpty)?;
         let mut new_block = Block::new(latest_block.index + 1, latest_block.hash.clone(), data);
         new_block.mine_block(self.difficulty)?;
         self.chain.push(new_block);
+        Ok(self.blocks().last().unwrap())
+    }
+
+    #[allow(unused)]
+    #[instrument(level = "debug")]
+    pub fn validate(&self) -> Result<()> {
+        let mut it = self.chain.iter();
+        let mut prev_block = it.next().ok_or(Error::ChainIsEmpty)?;
+        for block in it {
+            block.validate(&prev_block.hash, self.difficulty)?;
+            prev_block = block;
+        }
         Ok(())
     }
 
     #[allow(unused)]
-    #[instrument(skip(chain), level = "debug")]
-    pub fn validate_chain(chain: &[Block], difficulty: usize) -> Result<()> {
-        let mut it = chain.iter();
-        let mut prev_block = it.next().ok_or(Error::ChainIsEmpty)?;
-        for block in it {
-            block.validate(&prev_block.hash, difficulty)?;
-            prev_block = block;
+    #[instrument(skip_all, level = "info")]
+    pub fn replace_chain(&mut self, other: Blockchain) -> Result<bool> {
+        if other.chain.len() <= self.chain.len() {
+            return Ok(false);
         }
-        Ok(())
+        if let Err(e) = other.validate() {
+            error!("Failed to replace chain {:?}", e);
+            Err(e)?;
+        }
+        *self = other;
+
+        Ok(true)
     }
 }
 
@@ -84,7 +99,7 @@ mod tests {
         let mut blockchain = Blockchain::new(difficulty).unwrap();
         blockchain.add_block("Last Block".to_string()).unwrap();
 
-        let latest = blockchain.latest_block().unwrap();
+        let latest = blockchain.blocks().last().unwrap();
         assert_eq!(latest.data, "Last Block");
     }
 
@@ -95,7 +110,7 @@ mod tests {
         blockchain.add_block("A".to_string()).unwrap();
         blockchain.add_block("B".to_string()).unwrap();
 
-        let result = Blockchain::validate_chain(&blockchain.chain, difficulty);
+        let result = blockchain.validate();
         assert!(result.is_ok());
     }
 
@@ -108,7 +123,7 @@ mod tests {
 
         blockchain.chain[2].hash = "00_bad_hash".to_string();
 
-        let result = Blockchain::validate_chain(&blockchain.chain, difficulty);
+        let result = blockchain.validate();
         match result {
             Err(Error::BlockHasInvalidHash(index, _)) => assert_eq!(index, 2),
             v => panic!("Expected error BlockHasInvalidHash, actual {v:?}"),
@@ -118,11 +133,11 @@ mod tests {
     #[test]
     fn test_validate_chain_with_wrong_difficulty() {
         let difficulty = 2;
-        let wrong_difficulty = 4;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
         blockchain.add_block("test".to_string()).unwrap();
+        blockchain.difficulty = 4;
 
-        let result = Blockchain::validate_chain(&blockchain.chain, wrong_difficulty);
+        let result = blockchain.validate();
         match result {
             Err(Error::UnsatisfiedHashDifficulty(index, _)) => assert_eq!(index, 1),
             v => panic!("Expected error UnsatisfiedHashDifficulty, actual {v:?}"),
@@ -137,7 +152,7 @@ mod tests {
 
         blockchain.chain[1].previous_hash = "WRONG".to_string();
 
-        let result = Blockchain::validate_chain(&blockchain.chain, difficulty);
+        let result = blockchain.validate();
         match result {
             Err(Error::BlockHasInvalidPreviusBlockHash(index, _, _)) => assert_eq!(index, 1),
             v => panic!("Expected error BlockHasInvalidPreviusBlockHash, actual {v:?}"),
@@ -145,18 +160,10 @@ mod tests {
     }
 
     #[test]
-    fn test_latest_block_on_empty_chain_fails() {
-        let blockchain = Blockchain {
-            chain: vec![],
-            difficulty: 2,
-        };
-        let result = blockchain.latest_block();
-        assert!(matches!(result, Err(Error::ChainIsEmpty)));
-    }
-
-    #[test]
     fn test_validate_empty_chain_fails() {
-        let result = Blockchain::validate_chain(&[], 2);
+        let mut blockchain = Blockchain::new(2).unwrap();
+        blockchain.chain = vec![];
+        let result = blockchain.validate();
         assert!(matches!(result, Err(Error::ChainIsEmpty)));
     }
 }

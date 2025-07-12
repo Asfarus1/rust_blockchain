@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 
-use crate::blockchain::Blockchain;
 use crate::errors::Result;
+use crate::{block::Block, blockchain::Blockchain};
 use tracing::{error, info, instrument};
 
 pub struct Node {
+    pub address: String,
     pub name: String,
     pub blockchain: Blockchain,
     pub peers: HashSet<String>,
@@ -14,6 +15,7 @@ impl Node {
     #[instrument(name = "create_new_node", level = "info")]
     pub fn new(name: &str, difficulty: usize) -> Result<Self> {
         Ok(Self {
+            address: String::new(),
             name: name.to_string(),
             blockchain: Blockchain::new(difficulty)?,
             peers: HashSet::new(),
@@ -21,36 +23,32 @@ impl Node {
     }
 
     #[instrument(skip(self), fields(node_name = self.name), name = "add_block_to_node", level = "info")]
-    pub fn add_block(&mut self, data: &str) -> Result<()> {
+    pub fn add_block(&mut self, data: &str) -> Result<&Block> {
         self.blockchain.add_block(data.to_string())
     }
 
     #[allow(unused)]
     #[instrument(skip_all, fields(node_name = self.name), level = "info")]
-    pub fn replace_chain(&mut self, new_chain: Vec<crate::block::Block>) -> Result<bool> {
-        if new_chain.len() <= self.blockchain.chain.len() {
-            info!("Node {} new chain is not longer", self.name);
-            return Ok(false);
+    pub fn replace_chain(&mut self, other: Blockchain) -> Result<bool> {
+        let replaced = self.blockchain.replace_chain(other);
+        match replaced {
+            Err(ref e) => error!("Failed to replace chain {:?}", e),
+            Ok(false) => info!("Node {} new chain is not longer", self.name),
+            _ => {}
         }
-        if let Err(e) = Blockchain::validate_chain(&new_chain, self.blockchain.difficulty) {
-            error!("Failed to replace chain {:?}", e);
-            Err(e)?;
-        }
-        self.blockchain.chain = new_chain;
-
-        Ok(true)
+        replaced
     }
 
     #[allow(unused)]
     #[instrument(skip(self), fields(node_name = self.name), level = "info")]
-    pub fn register_peer(&mut self, peer: String) {
-        self.peers.insert(peer);
+    pub fn register_peer(&mut self, peer: String) -> bool {
+        self.peers.insert(peer)
     }
 
     #[allow(unused)]
     pub fn print_chain(&self) {
         println!("Chain of node {}:", self.name);
-        for block in &self.blockchain.chain {
+        for block in self.blockchain.blocks() {
             println!("{block}");
         }
         println!("-----------------------------");
@@ -59,6 +57,8 @@ impl Node {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::blockchain;
     use crate::errors::Error;
@@ -68,7 +68,7 @@ mod tests {
         // Create a new node and ensure it contains the genesis block
         let node = Node::new("Node1", 2).unwrap();
         assert_eq!(node.name, "Node1");
-        assert_eq!(node.blockchain.chain.len(), 1); // only genesis block
+        assert_eq!(node.blockchain.blocks().len(), 1); // only genesis block
     }
 
     #[test]
@@ -78,8 +78,8 @@ mod tests {
         node.add_block("Test 1").unwrap();
         node.add_block("Test 2").unwrap();
 
-        assert_eq!(node.blockchain.chain.len(), 3);
-        assert_eq!(node.blockchain.chain[2].data, "Test 2");
+        assert_eq!(node.blockchain.blocks().len(), 3);
+        assert_eq!(node.blockchain.blocks()[2].data, "Test 2");
     }
 
     #[test]
@@ -88,15 +88,13 @@ mod tests {
         let mut node1 = Node::new("Original", 2).unwrap();
         node1.add_block("Block A").unwrap();
 
-        let mut node2 = Node::new("Donor", 2).unwrap();
-        node2.add_block("Block A").unwrap();
-        node2.add_block("Block B").unwrap();
-
-        let longer_chain = node2.blockchain.chain.clone();
+        let mut longer_chain = Blockchain::new(2).unwrap();
+        longer_chain.add_block("Block A".to_owned()).unwrap();
+        longer_chain.add_block("Block B".to_owned()).unwrap();
 
         let replaced = node1.replace_chain(longer_chain).unwrap();
         assert!(replaced);
-        assert_eq!(node1.blockchain.chain.len(), 3);
+        assert_eq!(node1.blockchain.blocks().len(), 3);
     }
 
     #[test]
@@ -105,13 +103,11 @@ mod tests {
         let mut node1 = Node::new("A", 2).unwrap();
         node1.add_block("Only block").unwrap();
 
-        let node2 = Node::new("B", 2).unwrap(); // only genesis block
-
-        let shorter_chain = node2.blockchain.chain.clone();
+        let shorter_chain = Blockchain::new(2).unwrap();
 
         let replaced = node1.replace_chain(shorter_chain).unwrap();
         assert!(!replaced); // replacement should be rejected
-        assert_eq!(node1.blockchain.chain.len(), 2); // original chain remains
+        assert_eq!(node1.blockchain.blocks().len(), 2); // original chain remains
     }
 
     #[test]
@@ -119,18 +115,44 @@ mod tests {
         let mut node = Node::new("Node", 2).unwrap();
         node.add_block("Valid block").unwrap();
 
-        let mut fake_chain = blockchain::Blockchain::new(2).unwrap();
-        fake_chain.add_block("Valid block".to_string()).unwrap();
-        fake_chain.add_block("Tanpered block".to_string()).unwrap();
-        fake_chain.chain[2].hash = "00_tampered_hash".to_string();
+        let fake_chain: Blockchain = serde_json::from_value(json!({
+            "chain":[
+                {
+                    "index" : 0,
+                    "timestamp": 0,
+                    "previous_hash": "000",
+                    "hash": "000",
+                    "data" :"data",
+                    "nonce" :0
+                },
+                {
+                    "index" : 1,
+                    "timestamp": 0,
+                    "previous_hash": "000",
+                    "hash": "00056712531",
+                    "data" :"fake",
+                    "nonce" :0
+                },
+                {
+                    "index" : 1,
+                    "timestamp": 0,
+                    "previous_hash": "00056712531",
+                    "hash": "000",
+                    "data" :"fake",
+                    "nonce" :0
+                },
+            ],
+            "difficulty": 2
+        }))
+        .unwrap();
 
-        let result = node.replace_chain(fake_chain.chain);
+        let result = node.replace_chain(fake_chain);
         match result {
-            Err(Error::BlockHasInvalidHash(2, _)) => {}
+            Err(Error::BlockHasInvalidHash(1, _)) => {}
             v => panic!("Expected error BlockHasInvalidHash, actual {v:?}"),
         }
 
-        assert_eq!(node.blockchain.chain.len(), 2); // chain remains unchanged
+        assert_eq!(node.blockchain.blocks().len(), 2); // chain remains unchanged
     }
 
     #[test]
