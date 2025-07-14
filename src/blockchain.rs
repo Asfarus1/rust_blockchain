@@ -1,4 +1,4 @@
-use crate::block::Block;
+use crate::block::{Block, Transaction};
 use crate::errors::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, instrument};
@@ -12,7 +12,15 @@ pub struct Blockchain {
 impl Blockchain {
     #[instrument(name = "create_new_blockchain", level = "debug")]
     pub fn new(difficulty: usize) -> Result<Self> {
-        let mut genesis_block = Block::new(0, "0".to_string(), "Genesis Block".to_string());
+        let mut genesis_block = Block::new(
+            0,
+            "0".to_string(),
+            vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }],
+        );
         genesis_block.mine_block(difficulty)?;
         Ok(Self {
             chain: vec![genesis_block],
@@ -25,9 +33,13 @@ impl Blockchain {
     }
 
     #[instrument(skip(self), level = "debug", name = "add_block_to_blockchain")]
-    pub fn add_block(&mut self, data: String) -> Result<&Block> {
+    pub fn add_block(&mut self, transactions: Vec<Transaction>) -> Result<&Block> {
         let latest_block = self.chain.last().ok_or(Error::ChainIsEmpty)?;
-        let mut new_block = Block::new(latest_block.index + 1, latest_block.hash.clone(), data);
+        let mut new_block = Block::new(
+            latest_block.index + 1,
+            latest_block.hash.clone(),
+            transactions,
+        );
         new_block.mine_block(self.difficulty)?;
         self.chain.push(new_block);
         Ok(self.blocks().last().unwrap())
@@ -75,7 +87,14 @@ mod tests {
         let genesis = &blockchain.chain[0];
         assert_eq!(genesis.index, 0);
         assert_eq!(genesis.previous_hash, "0");
-        assert_eq!(genesis.data, "Genesis Block");
+        assert_eq!(
+            genesis.transactions,
+            vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }]
+        );
         assert!(genesis.hash.starts_with(&"0".repeat(difficulty)));
     }
 
@@ -84,11 +103,30 @@ mod tests {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
 
-        blockchain.add_block("Block 1".to_string()).unwrap();
-        blockchain.add_block("Block 2".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         assert_eq!(blockchain.chain.len(), 3);
-        assert_eq!(blockchain.chain[2].data, "Block 2");
+        assert_eq!(
+            blockchain.chain[2].transactions,
+            vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }]
+        );
         assert_eq!(blockchain.chain[2].index, 2);
         assert_eq!(blockchain.chain[2].previous_hash, blockchain.chain[1].hash);
     }
@@ -97,18 +135,43 @@ mod tests {
     fn test_latest_block_returns_last_block() {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
-        blockchain.add_block("Last Block".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         let latest = blockchain.blocks().last().unwrap();
-        assert_eq!(latest.data, "Last Block");
+        assert_eq!(
+            latest.transactions,
+            vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }]
+        );
     }
 
     #[test]
     fn test_validate_chain_success() {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
-        blockchain.add_block("A".to_string()).unwrap();
-        blockchain.add_block("B".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         let result = blockchain.validate();
         assert!(result.is_ok());
@@ -118,8 +181,20 @@ mod tests {
     fn test_validate_chain_with_tampered_block_hash() {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
-        blockchain.add_block("X".to_string()).unwrap();
-        blockchain.add_block("Y".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         blockchain.chain[2].hash = "00_bad_hash".to_string();
 
@@ -134,7 +209,13 @@ mod tests {
     fn test_validate_chain_with_wrong_difficulty() {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
-        blockchain.add_block("test".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
         blockchain.difficulty = 4;
 
         let result = blockchain.validate();
@@ -148,7 +229,13 @@ mod tests {
     fn test_validate_chain_with_wrong_previous_hash() {
         let difficulty = 2;
         let mut blockchain = Blockchain::new(difficulty).unwrap();
-        blockchain.add_block("test".to_string()).unwrap();
+        blockchain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         blockchain.chain[1].previous_hash = "WRONG".to_string();
 

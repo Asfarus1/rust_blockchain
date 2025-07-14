@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::block::Transaction;
 use crate::errors::Result;
 use crate::{block::Block, blockchain::Blockchain};
 use tracing::{error, info, instrument};
@@ -23,8 +24,8 @@ impl Node {
     }
 
     #[instrument(skip(self), fields(node_name = self.name), name = "add_block_to_node", level = "info")]
-    pub fn add_block(&mut self, data: &str) -> Result<&Block> {
-        self.blockchain.add_block(data.to_string())
+    pub fn add_block(&mut self, transactions: Vec<Transaction>) -> Result<&Block> {
+        self.blockchain.add_block(transactions)
     }
 
     #[allow(unused)]
@@ -57,10 +58,10 @@ impl Node {
 
 #[cfg(test)]
 mod tests {
+    use crate::block::Transaction;
     use serde_json::json;
 
     use super::*;
-    use crate::blockchain;
     use crate::errors::Error;
 
     #[test]
@@ -75,22 +76,56 @@ mod tests {
     fn test_add_block_to_node() {
         // Add two blocks to the node and verify their data and indexes
         let mut node = Node::new("NodeA", 2).unwrap();
-        node.add_block("Test 1").unwrap();
-        node.add_block("Test 2").unwrap();
-
+        node.add_block(vec![Transaction {
+            from: "A".to_string(),
+            to: "B".to_string(),
+            amount: 100,
+        }])
+        .unwrap();
+        node.add_block(vec![Transaction {
+            from: "B".to_string(),
+            to: "C".to_string(),
+            amount: 100,
+        }])
+        .unwrap();
         assert_eq!(node.blockchain.blocks().len(), 3);
-        assert_eq!(node.blockchain.blocks()[2].data, "Test 2");
+        assert_eq!(
+            node.blockchain.blocks()[2].transactions,
+            vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }]
+        );
     }
 
     #[test]
     fn test_replace_chain_success() {
         // Replace current chain with a longer and valid one
         let mut node1 = Node::new("Original", 2).unwrap();
-        node1.add_block("Block A").unwrap();
+        node1
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         let mut longer_chain = Blockchain::new(2).unwrap();
-        longer_chain.add_block("Block A".to_owned()).unwrap();
-        longer_chain.add_block("Block B".to_owned()).unwrap();
+        longer_chain
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
+        longer_chain
+            .add_block(vec![Transaction {
+                from: "B".to_string(),
+                to: "C".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         let replaced = node1.replace_chain(longer_chain).unwrap();
         assert!(replaced);
@@ -101,7 +136,13 @@ mod tests {
     fn test_replace_chain_fails_if_not_longer() {
         // Attempt to replace the chain with a shorter one should fail
         let mut node1 = Node::new("A", 2).unwrap();
-        node1.add_block("Only block").unwrap();
+        node1
+            .add_block(vec![Transaction {
+                from: "A".to_string(),
+                to: "B".to_string(),
+                amount: 100,
+            }])
+            .unwrap();
 
         let shorter_chain = Blockchain::new(2).unwrap();
 
@@ -113,7 +154,12 @@ mod tests {
     #[test]
     fn test_replace_chain_fails_if_invalid() {
         let mut node = Node::new("Node", 2).unwrap();
-        node.add_block("Valid block").unwrap();
+        node.add_block(vec![Transaction {
+            from: "A".to_string(),
+            to: "B".to_string(),
+            amount: 100,
+        }])
+        .unwrap();
 
         let fake_chain: Blockchain = serde_json::from_value(json!({
             "chain":[
@@ -122,7 +168,13 @@ mod tests {
                     "timestamp": 0,
                     "previous_hash": "000",
                     "hash": "000",
-                    "data" :"data",
+                    "transactions" :[
+                        {
+                            "from" : "A",
+                            "to" : "B",
+                            "amount" : 100
+                        }
+                    ],
                     "nonce" :0
                 },
                 {
@@ -130,7 +182,13 @@ mod tests {
                     "timestamp": 0,
                     "previous_hash": "000",
                     "hash": "00056712531",
-                    "data" :"fake",
+                    "transactions" :[
+                        {
+                            "from" : "A",
+                            "to" : "B",
+                            "amount" : 200
+                        }
+                    ],
                     "nonce" :0
                 },
                 {
@@ -138,7 +196,13 @@ mod tests {
                     "timestamp": 0,
                     "previous_hash": "00056712531",
                     "hash": "000",
-                    "data" :"fake",
+                    "transactions" :[
+                        {
+                            "from" : "A",
+                            "to" : "B",
+                            "amount" : 300
+                        }
+                    ],
                     "nonce" :0
                 },
             ],
@@ -158,7 +222,12 @@ mod tests {
     #[test]
     fn test_print_chain_runs_without_panic() {
         let mut node = Node::new("Printable", 2).unwrap();
-        node.add_block("Print me").unwrap();
+        node.add_block(vec![Transaction {
+            from: "A".to_string(),
+            to: "B".to_string(),
+            amount: 100,
+        }])
+        .unwrap();
         node.print_chain(); // smoke test
     }
 }

@@ -1,6 +1,7 @@
 mod common;
 
 use reqwest::Client;
+use rust_blockchain::block::Transaction;
 use rust_blockchain::blockchain::Blockchain;
 use rust_blockchain::config::Config;
 use rust_blockchain::{errors::Result, node::Node};
@@ -33,9 +34,14 @@ async fn test_manual_node_sync_between_two_servers() -> Result<()> {
 
     let client = Client::new();
 
+    let tx = Transaction {
+        from: "A".into(),
+        to: "B".into(),
+        amount: 1,
+    };
     let res = client
         .post("http://localhost:3001/add_block")
-        .json("Block A1")
+        .json(&vec![tx.clone()])
         .send()
         .await
         .unwrap();
@@ -68,6 +74,10 @@ async fn test_manual_node_sync_between_two_servers() -> Result<()> {
         .unwrap();
 
     assert_eq!(chain_a, chain_b);
+    assert_eq!(
+        chain_b.blocks().last().unwrap().transactions,
+        vec![tx.clone()]
+    );
 
     Ok(())
 }
@@ -97,6 +107,11 @@ async fn test_autosync_between_two_servers() -> Result<()> {
 
     let client = Client::new();
 
+    let tx = Transaction {
+        from: "A".into(),
+        to: "B".into(),
+        amount: 1,
+    };
     let res = client
         .post("http://localhost:3003/peer")
         .json("http://localhost:3004")
@@ -107,7 +122,7 @@ async fn test_autosync_between_two_servers() -> Result<()> {
 
     let res = client
         .post("http://localhost:3003/add_block")
-        .json("Block A1")
+        .json(&vec![tx.clone()])
         .send()
         .await
         .unwrap();
@@ -122,8 +137,8 @@ async fn test_autosync_between_two_servers() -> Result<()> {
         .await
         .unwrap();
 
-    let last_block_content = chain_b.blocks().last().unwrap().data.clone();
-    assert_eq!(last_block_content, "Block A1");
+    let last_block_txs = &chain_b.blocks().last().unwrap().transactions;
+    assert_eq!(last_block_txs, &vec![tx]);
 
     Ok(())
 }

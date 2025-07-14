@@ -1,6 +1,10 @@
 use crate::{
-    api::midleware::UuidRequestId, block::Block, blockchain::Blockchain, config::Config,
-    errors::Result, node::Node,
+    api::midleware::UuidRequestId,
+    block::{Block, Transaction},
+    blockchain::Blockchain,
+    config::Config,
+    errors::Result,
+    node::Node,
 };
 use axum::{
     Router,
@@ -138,13 +142,13 @@ async fn register_peer(State(node): State<SharedNode>, Json(data): Json<String>)
 #[axum::debug_handler]
 async fn add_block(
     State(node): State<SharedNode>,
-    Json(data): Json<String>,
+    Json(data): Json<Vec<Transaction>>,
 ) -> Result<Json<Block>> {
     let peers: Vec<String>;
     let blockchain: Blockchain;
     let block = {
         let mut node = node.lock().unwrap();
-        let block = node.add_block(&data)?.clone();
+        let block = node.add_block(data)?.clone();
         info!("Block mined and added");
         peers = node.peers.iter().cloned().collect();
         blockchain = node.blockchain.clone();
