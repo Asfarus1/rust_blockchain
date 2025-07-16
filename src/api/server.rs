@@ -8,7 +8,7 @@ use crate::{
 };
 use axum::{
     Router,
-    extract::{Json, Request, State},
+    extract::{Json, Path, Request, State},
     http::HeaderName,
     routing::{get, post},
 };
@@ -27,6 +27,7 @@ pub async fn start_http_server(node: SharedNode, conf: Config) -> Result<()> {
         .route("/add_block", post(add_block))
         .route("/sync", post(sync_chain))
         .route("/peer", post(register_peer))
+        .route("/balance/{address}", get(get_balance))
         .with_state(node.clone())
         .layer(
             TraceLayer::new_for_http().make_span_with(|req: &Request<_>| {
@@ -99,6 +100,16 @@ async fn notify_peers_about_new_peer(new_peer: &str, peers: Vec<String>) {
 async fn get_chain(State(node): State<SharedNode>) -> Result<Json<Blockchain>> {
     let chain = node.lock().unwrap().blockchain.clone();
     Ok(Json(chain))
+}
+
+#[axum::debug_handler]
+async fn get_balance(
+    State(node): State<SharedNode>,
+    Path(address): Path<String>,
+) -> Result<Json<i64>> {
+    let balance = node.lock().unwrap().blockchain.get_balance(&address);
+    info!("Balance for {address}: {balance}");
+    Ok(Json(balance))
 }
 
 #[axum::debug_handler]

@@ -142,3 +142,66 @@ async fn test_autosync_between_two_servers() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_get_balance() {
+    common::init_tracing();
+
+    let conf_a = Config { port: 3005 };
+    let node_a = Arc::new(Mutex::new(Node::new("A", 2).unwrap()));
+
+    let _ = task::spawn(async move {
+        rust_blockchain::api::start_http_server(node_a, conf_a)
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let client = Client::new();
+
+    let txs = vec![
+        Transaction {
+            from: "A".into(),
+            to: "B".into(),
+            amount: 100,
+        },
+        Transaction {
+            from: "A".into(),
+            to: "B".into(),
+            amount: 10,
+        },
+        Transaction {
+            from: "B".into(),
+            to: "A".into(),
+            amount: 50,
+        },
+    ];
+    let _ = client
+        .post("http://localhost:3005/add_block")
+        .json(&txs)
+        .send()
+        .await
+        .unwrap();
+
+    let balance_b: i64 = client
+        .get("http://localhost:3005/balance/B")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(balance_b, 60);
+
+    let balance_c: i64 = client
+        .get("http://localhost:3005/balance/C")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    assert_eq!(balance_c, 0);
+}

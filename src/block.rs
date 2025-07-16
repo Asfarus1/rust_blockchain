@@ -8,7 +8,7 @@ use tracing::instrument;
 pub struct Transaction {
     pub from: String,
     pub to: String,
-    pub amount: u64,
+    pub amount: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

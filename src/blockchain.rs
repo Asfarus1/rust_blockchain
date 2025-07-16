@@ -12,15 +12,7 @@ pub struct Blockchain {
 impl Blockchain {
     #[instrument(name = "create_new_blockchain", level = "debug")]
     pub fn new(difficulty: usize) -> Result<Self> {
-        let mut genesis_block = Block::new(
-            0,
-            "0".to_string(),
-            vec![Transaction {
-                from: "A".to_string(),
-                to: "B".to_string(),
-                amount: 100,
-            }],
-        );
+        let mut genesis_block = Block::new(0, "0".to_string(), vec![]);
         genesis_block.mine_block(difficulty)?;
         Ok(Self {
             chain: vec![genesis_block],
@@ -30,6 +22,20 @@ impl Blockchain {
 
     pub fn blocks(&self) -> &[Block] {
         &self.chain[..]
+    }
+
+    pub fn get_balance(&self, address: &str) -> i64 {
+        self.chain
+            .iter()
+            .flat_map(|b| b.transactions.iter())
+            .filter(|t| t.from == address || t.to == address)
+            .fold(0i64, |acc, t| {
+                if t.from == address {
+                    acc - t.amount
+                } else {
+                    acc + t.amount
+                }
+            })
     }
 
     #[instrument(skip(self), level = "debug", name = "add_block_to_blockchain")]
@@ -87,14 +93,7 @@ mod tests {
         let genesis = &blockchain.chain[0];
         assert_eq!(genesis.index, 0);
         assert_eq!(genesis.previous_hash, "0");
-        assert_eq!(
-            genesis.transactions,
-            vec![Transaction {
-                from: "A".to_string(),
-                to: "B".to_string(),
-                amount: 100,
-            }]
-        );
+        assert_eq!(genesis.transactions, vec![]);
         assert!(genesis.hash.starts_with(&"0".repeat(difficulty)));
     }
 
